@@ -309,6 +309,8 @@ class PerFeatureTransformer(nn.Module):
         self.cached_feature_positional_embeddings: torch.Tensor | None = None
         self.seed = seed if seed is not None else random.randint(0, 1_000_000)  # noqa: S311
 
+        self.embeddings_record = None
+
     def reset_save_peak_mem_factor(self, factor: int | None = None) -> None:
         """Sets the save_peak_mem_factor for all layers.
 
@@ -635,6 +637,7 @@ class PerFeatureTransformer(nn.Module):
             half_layers=half_layers,
             cache_trainset_representation=self.cache_trainset_representation,
         )  # b s f+1 e -> b s f+1 e
+        # Without disrupting existing code, save encoder output
 
         # If we are using a decoder
         if self.transformer_decoder:
@@ -665,6 +668,7 @@ class PerFeatureTransformer(nn.Module):
         if only_return_standard_out:
             assert self.decoder_dict is not None
             output_decoded = self.decoder_dict["standard"](test_encoder_out)
+            self.embeddings_record = output_decoded.clone()
         else:
             output_decoded = (
                 {k: v(test_encoder_out) for k, v in self.decoder_dict.items()}
@@ -676,6 +680,7 @@ class PerFeatureTransformer(nn.Module):
             train_encoder_out = encoder_out[:, :single_eval_pos_, -1].transpose(0, 1)
             output_decoded["train_embeddings"] = train_encoder_out
             output_decoded["test_embeddings"] = test_encoder_out
+            self.embeddings_record = torch.concat([train_encoder_out, test_encoder_out])
 
         return output_decoded
 
